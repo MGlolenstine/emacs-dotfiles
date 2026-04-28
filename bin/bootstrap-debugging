@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+ADAPTER_ROOT="$ROOT/debug-adapters"
+ADAPTER_DIR="$ADAPTER_ROOT/js-debug"
+VERSION="${JS_DEBUG_VERSION:-v1.117.0}"
+ARCHIVE="js-debug-dap-${VERSION}.tar.gz"
+URL="https://github.com/microsoft/vscode-js-debug/releases/download/${VERSION}/${ARCHIVE}"
+TMPDIR="$(mktemp -d)"
+
+cleanup() {
+  rm -rf "$TMPDIR"
+}
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    printf 'Missing required command: %s\n' "$1" >&2
+    exit 1
+  fi
+}
+
+trap cleanup EXIT
+
+require_command curl
+require_command tar
+require_command npm
+
+mkdir -p "$ADAPTER_ROOT"
+
+printf 'Downloading %s\n' "$URL"
+curl -fsSL "$URL" -o "$TMPDIR/$ARCHIVE"
+
+rm -rf "$ADAPTER_DIR"
+mkdir -p "$ADAPTER_DIR"
+tar -xzf "$TMPDIR/$ARCHIVE" --strip-components 1 -C "$ADAPTER_DIR"
+
+if [ ! -f "$ADAPTER_DIR/src/dapDebugServer.js" ]; then
+  printf 'Expected adapter entrypoint missing: %s\n' \
+    "$ADAPTER_DIR/src/dapDebugServer.js" >&2
+  exit 1
+fi
+
+if ! command -v tsx >/dev/null 2>&1; then
+  printf 'Installing tsx globally with npm\n'
+  npm install --global tsx
+fi
+
+printf 'Installed js-debug %s at %s\n' "$VERSION" "$ADAPTER_DIR"
+printf 'tsx is available at %s\n' "$(command -v tsx)"
