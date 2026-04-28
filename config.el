@@ -636,15 +636,20 @@ references (e.g. enum values like TestCase.Name)."
 (defun +project-tools--run-in-vterm (dir cmd)
   "Run CMD in a vterm buffer under directory DIR."
   (let ((buffer-name (format "*project-cmd: %s*" cmd)))
-    ;; Create or get the vterm buffer
-    (if (buffer-live-p (get-buffer buffer-name))
-        (switch-to-buffer buffer-name)
-      (vterm buffer-name))
-    ;; Set the working directory
-    (setq default-directory dir)
-    ;; Send the command to vterm
-    (vterm-send-string cmd)
-    (vterm-send-return)))
+    ;; Open the runner in a popup while keeping focus in the origin window.
+    (let ((default-directory dir))
+      (let ((buf (vterm-other-window buffer-name)))
+        (with-current-buffer buf
+          (setq default-directory dir)
+          (vterm-send-string cmd)
+          (vterm-send-return))))))
+
+(set-popup-rule! "^\\*project-cmd:"
+  :side 'bottom
+  :size 0.25
+  :select nil
+  :quit nil
+  :ttl nil)
 
 (defun +project-tools-run-picker ()
   "Pick a project command from package.json scripts or Makefile targets and run it."
