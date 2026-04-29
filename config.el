@@ -191,7 +191,14 @@
       :desc "Visual regex replace"
       "s r" #'vr/replace)
 
-
+;; Make delete/change operators use the black-hole register by default.
+;; Explicit yanks still populate the kill ring, and explicit registers still work.
+(after! evil
+  (defun +evil-delete-use-black-hole-by-default (args)
+    (setf (nth 3 args) (or (nth 3 args) ?_))
+    args)
+  (advice-remove 'evil-delete #'+evil-delete-use-black-hole-by-default)
+  (advice-add 'evil-delete :filter-args #'+evil-delete-use-black-hole-by-default))
 
 ;; ──────────────────────────────────────────────────────────────────────
 ;; TypeScript / JavaScript debugging via dape + vscode-js-debug
