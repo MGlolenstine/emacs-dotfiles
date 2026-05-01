@@ -191,14 +191,34 @@
       :desc "Visual regex replace"
       "s r" #'vr/replace)
 
-;; Make delete/change operators use the black-hole register by default.
-;; Explicit yanks still populate the kill ring, and explicit registers still work.
+;; Keep ordinary yanks, cuts, changes, and pastes internal to Emacs. Use
+;; uppercase Y/P when the system clipboard is explicitly wanted.
+(setq select-enable-clipboard nil)
+
+;; System clipboard operations. Lowercase y/d/c/p keep Evil's normal internal
+;; register behavior, so deleting or changing text still works as a cut.
 (after! evil
-  (defun +evil-delete-use-black-hole-by-default (args)
-    (setf (nth 3 args) (or (nth 3 args) ?_))
-    args)
-  (advice-remove 'evil-delete #'+evil-delete-use-black-hole-by-default)
-  (advice-add 'evil-delete :filter-args #'+evil-delete-use-black-hole-by-default))
+  (evil-define-operator +evil-yank-to-system-clipboard
+    (beg end type _register yank-handler)
+    "Yank text to the system clipboard."
+    :move-point nil
+    :repeat nil
+    (interactive "<R><x><y>")
+    (evil-yank beg end type ?+ yank-handler)
+    (message "Yanked to system clipboard"))
+
+  (evil-define-command +evil-paste-from-system-clipboard (count)
+    "Paste text from the system clipboard."
+    :suppress-operator t
+    (interactive "*P")
+    (evil-paste-before count ?+))
+
+  (map! :map evil-normal-state-map
+        "Y" #'+evil-yank-to-system-clipboard
+        "P" #'+evil-paste-from-system-clipboard
+        :map evil-visual-state-map
+        "Y" #'+evil-yank-to-system-clipboard
+        "P" #'+evil-paste-from-system-clipboard))
 
 ;; ──────────────────────────────────────────────────────────────────────
 ;; TypeScript / JavaScript debugging via dape + vscode-js-debug
