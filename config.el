@@ -179,7 +179,8 @@
 ;; Multiple cursors (closer to Helix multi-select)
 (map! :nv "SPC m c" #'mc/mark-all-like-this
       :nv "SPC m n" #'mc/mark-next-like-this
-      :nv "SPC m p" #'mc/mark-previous-like-this)
+      :nv "SPC m p" #'mc/mark-previous-like-this
+      :nv "SPC m y" #'yank-rectangle)
 
 ;; Better search and select
 ;; (map! :n "SPC s s" #'swiper           ; visual search
@@ -190,6 +191,37 @@
       :nv
       :desc "Visual regex replace"
       "s r" #'vr/replace)
+
+;; C/C++ source/header switching. Prefer clangd's LSP answer when Eglot is
+;; managing the buffer; fall back to Emacs' built-in extension-based lookup.
+(defun +cc--eglot-switch-source-header-uri ()
+  "Return clangd's source/header counterpart URI via Eglot, or nil."
+  (when (and (fboundp 'eglot-managed-p)
+             (eglot-managed-p)
+             (fboundp 'eglot-current-server)
+             (fboundp 'eglot--TextDocumentIdentifier)
+             (fboundp 'eglot--request))
+    (condition-case nil
+        (let ((uri (eglot--request (eglot-current-server)
+                                   :textDocument/switchSourceHeader
+                                   (eglot--TextDocumentIdentifier))))
+          (when (and (stringp uri) (> (length uri) 0))
+            uri))
+      (error nil))))
+
+(defun +cc-switch-source-header (&optional other-window)
+  "Switch between C/C++ source and header files.
+With prefix OTHER-WINDOW, open the counterpart in another window."
+  (interactive "P")
+  (if-let* ((uri (+cc--eglot-switch-source-header-uri)))
+      (funcall (if other-window #'find-file-other-window #'find-file)
+               (eglot-uri-to-path uri))
+    (require 'find-file)
+    (ff-find-other-file other-window t)))
+
+(map! :leader
+      :desc "Switch C source/header"
+      "c h" #'+cc-switch-source-header)
 
 ;; Keep ordinary yanks, cuts, changes, and pastes internal to Emacs. Use
 ;; uppercase Y/P when the system clipboard is explicitly wanted.
@@ -777,7 +809,7 @@ references (e.g. enum values like TestCase.Name)."
 (map! :leader
       :desc "Format buffer"
       "c f" (cmd! (undo-boundary)
-                  (+format/region-or-buffer)
+                  (eglot-format)
                   (set-buffer-modified-p t)))
 
 ;; ──────────────────────────────────────────────────────────────────────
