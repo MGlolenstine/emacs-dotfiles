@@ -809,7 +809,9 @@ references (e.g. enum values like TestCase.Name)."
 (map! :leader
       :desc "Format buffer"
       "c f" (cmd! (undo-boundary)
-                  (eglot-format)
+                  (if (doom-region-active-p)
+                      (eglot-format (doom-region-beginning) (doom-region-end))
+                    (eglot-format-buffer))
                   (set-buffer-modified-p t)))
 
 ;; ──────────────────────────────────────────────────────────────────────
