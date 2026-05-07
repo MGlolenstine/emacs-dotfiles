@@ -697,7 +697,8 @@ references (e.g. enum values like TestCase.Name)."
   (let ((buffer-name (format "*project-cmd: %s*" cmd)))
     ;; Open the runner in a popup while keeping focus in the origin window.
     (let ((default-directory dir))
-      (let ((buf (vterm-other-window buffer-name)))
+      (let* ((vterm-buffer-name buffer-name)
+             (buf (vterm-other-window)))
         (with-current-buffer buf
           (setq default-directory dir)
           (vterm-send-string cmd)
