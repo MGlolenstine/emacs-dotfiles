@@ -692,19 +692,15 @@ references (e.g. enum values like TestCase.Name)."
                                                    (plist-get b :name)))))))
     results))
 
-(defun +project-tools--run-in-vterm (dir cmd)
-  "Run CMD in a vterm buffer under directory DIR."
-  (let ((buffer-name (format "*project-cmd: %s*" cmd)))
-    ;; Open the runner in a popup while keeping focus in the origin window.
-    (let ((default-directory dir))
-      (let* ((vterm-buffer-name buffer-name)
-             (buf (vterm-other-window)))
-        (with-current-buffer buf
-          (setq default-directory dir)
-          (vterm-send-string cmd)
-          (vterm-send-return))))))
+(defun +project-tools--compile (dir cmd)
+  "Run CMD with `compile' under directory DIR."
+  (let ((default-directory dir)
+        (compile-command cmd)
+        (compilation-buffer-name-function
+         (lambda (_mode) (format "*project-compile: %s*" cmd))))
+    (compile cmd)))
 
-(set-popup-rule! "^\\*project-cmd:"
+(set-popup-rule! "^\\*project-compile:"
   :side 'bottom
   :size 0.25
   :select nil
@@ -755,7 +751,7 @@ references (e.g. enum values like TestCase.Name)."
                  (cmd (plist-get selected :cmd))
                  (cwd (plist-get selected :cwd)))
             (when cmd
-              (+project-tools--run-in-vterm cwd cmd))))))))
+              (+project-tools--compile cwd cmd))))))))
 
 (map! :leader
       :desc "Run project command"
