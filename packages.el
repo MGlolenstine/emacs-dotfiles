@@ -61,3 +61,4 @@
 (package! http-client
   :recipe (:host github :repo "MGlolenstine/emacs-http-client"
            :files ("*.el")))
+(package! expreg)

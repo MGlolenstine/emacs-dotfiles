@@ -68,19 +68,6 @@
 ;; category entirely (actual grammar errors will still appear via other means).
 (add-to-list 'warning-suppress-types '(treesit))
 
-;; ── Fix 1: Kill vc-mode's per-file-open git subprocess storm (~1.4s saved) ──
-;; vc-refresh-state fires on every find-file and spawns ~20 git subprocesses
-;; (vc-git-working-revision, vc-git-mode-line-string, git symbolic-ref, etc.)
-;; costing ~1.4s on macOS due to slow process spawn overhead.
-;;
-;; Strategy: keep Git in vc-handled-backends (diff-hl needs vc-backend to
-;; return 'Git for fringe markers) but remove the hook that fires the
-;; subprocess storm and disable the modeline vc string (we use Magit anyway).
-(remove-hook 'find-file-hook #'vc-refresh-state)
-;; Disable the vc modeline segment — this suppresses vc-git-mode-line-string
-;; and vc-git--symbolic-ref subprocess calls on buffer switches.
-(setq vc-display-status nil)
-
 ;; Use external indexing for fast project file finding.
 (after! projectile
   (setq projectile-indexing-method 'alien
@@ -102,17 +89,6 @@
 (after! flyspell
   (setq flyspell-issue-message-flag nil)
   (setq flyspell-delay 2))
-
-;; ── Fix 2: Defer flycheck initial syntax check (~0.47s saved) ─────────────
-;; flycheck-eslint-config-exists-p spawns a Node.js process synchronously on
-;; the first buffer open to locate eslint config, costing ~470ms. Removing
-;; 'mode-enabled from check triggers means the first check fires after
-;; idle-change delay instead of immediately on file open.
-(after! flycheck
-  (setq flycheck-check-syntax-automatically
-        '(idle-change idle-buffer-switch save))
-  (setq flycheck-idle-change-delay 1.0)
-  (setq flycheck-idle-buffer-switch-delay 1.5))
 
 ;; ── Fix B: Show ESLint warnings alongside LSP type errors ─────────────────
 ;; flycheck-eglot-exclusive t (default) replaces all checkers with eglot-check
@@ -757,51 +733,6 @@ references (e.g. enum values like TestCase.Name)."
       :desc "Run project command"
       "x" #'+project-tools-run-picker)
 
-(after! eglot
-  ;; 1. Do not freeze Emacs waiting for the TypeScript LSP to boot.
-  ;; Let it connect in the background so you can start typing immediately.
-  (setq eglot-sync-connect nil)
-
-  ;; 2. Disable the hidden Eglot events logging buffer.
-  ;; This stops Emacs from allocating 100+ MB of memory just to save
-  ;; massive JSON initialization payloads sent by the TS server.
-  (setq eglot-events-buffer-size 0)
-
-  ;; Fix 3: Keep the TS language server alive between file switches (~0.2s saved).
-  ;; With eglot-autoshutdown t, closing the last TS buffer kills the server
-  ;; synchronously. The next TS file open then pays the full reconnect cost.
-  ;; +lsp-defer-shutdown gives the server a 30s grace period — if you reopen a
-  ;; TS file within 30s it reuses the live server with zero reconnect cost.
-  (setq +lsp-defer-shutdown 30))
-
-;; 3. Defer eglot startup to after the buffer is rendered.
-;; lsp! is added by Doom to <mode>-local-vars-hook and fires synchronously
-;; during after-find-file. On the first .ts file open this blocks ~2s while
-;; typescript-language-server boots. We remove lsp! from those hooks and
-;; replace it with a version that defers via an idle timer.
-(defun +lsp!-deferred ()
-  "Like `lsp!' but runs after a short idle delay to avoid blocking find-file."
-  (let ((buf (current-buffer)))
-    (run-with-idle-timer 0.1 nil
-                         (lambda ()
-                           (when (buffer-live-p buf)
-                             (with-current-buffer buf
-                               (lsp!)))))))
-
-(defun +lsp!-replace-with-deferred-h ()
-  "Swap `lsp!' for `+lsp!-deferred' on the current mode's local-vars-hook."
-  (let ((hook (intern (format "%s-local-vars-hook" major-mode))))
-    (when (and (boundp hook) (memq #'lsp! (symbol-value hook)))
-      (remove-hook hook #'lsp!)
-      (add-hook hook #'+lsp!-deferred))))
-
-;; Run on mode activation, before local-vars-hook fires, so the swap happens
-;; in time. typescript-ts-mode is built-in (no package to eval-after-load on),
-;; so we hook into the mode hooks themselves.
-(dolist (mode-hook '(typescript-mode-hook typescript-ts-mode-hook
-                     js-mode-hook js-ts-mode-hook))
-  (add-hook mode-hook #'+lsp!-replace-with-deferred-h))
-
 ;; Fix the format buffer to create an undo-boundary and set the buffer to changed.
 (map! :leader
       :desc "Format buffer"
@@ -836,3 +767,20 @@ references (e.g. enum values like TestCase.Name)."
     :select nil
     :quit   t
     :ttl    nil))
+
+;; For Helix-like multi-cursor selection.
+;; Mark and press `s` to enter regex.
+(defun my/evil-mc-helix-s ()
+  "Replicate Helix's `s` command by pre-filling the evil-mc ex command."
+  (interactive)
+  (evil-ex "'<,'>mc "))
+
+(map! :v "s" #'my/evil-mc-helix-s)
+
+;; Enable visual expansion based on the tree-sitter.
+(use-package! expreg
+  :after evil
+  :config
+  (map! :map evil-visual-state-map
+        "RET" #'expreg-expand
+        "S-RET" #'expreg-contract)) ; Shift + Enter to shrink selection if you go too far
